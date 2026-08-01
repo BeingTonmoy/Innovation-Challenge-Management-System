@@ -170,12 +170,12 @@ public class Login extends JFrame {
                                         frame.setVisible(true);
                                     } else {
                                         setVisible(false);
-                                        SubmitIdea frame = new SubmitIdea(username);
+                                        UserHome frame = new UserHome(username);
                                         frame.setVisible(true);
                                     }
                                 } else {
                                     setVisible(false);
-                                    SubmitIdea frame = new SubmitIdea(username);
+                                    UserHome frame = new UserHome(username);
                                     frame.setVisible(true);
                                 }
                             } else {

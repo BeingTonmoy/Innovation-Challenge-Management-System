@@ -237,7 +237,10 @@ public class SubmitIdea extends JFrame {
                 }
             }
 
-            int innovatorId = 1; // TODO: Replace with actual logged-in innovator id
+            int innovatorId = resolveInnovatorId(conn);
+            if (innovatorId <= 0) {
+                throw new SQLException("No innovator profile was found for user: " + username);
+            }
 
             try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO IDEA (IDEAID, INNOVATORID, CALLID, TITLE, DESCRIPTION, CATEGORY, SUBMISSIONDATE, STATUS) " +
@@ -284,6 +287,48 @@ public class SubmitIdea extends JFrame {
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Failed to submit idea: " + e.getMessage(), "DB Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private int resolveInnovatorId(Connection conn) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT UserID FROM USER_ACCOUNT WHERE UPPER(Username) = UPPER(?)")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int userId = rs.getInt("UserID");
+                    try (PreparedStatement ps2 = conn.prepareStatement("SELECT InnovatorID FROM INNOVATOR WHERE UserID = ?")) {
+                        ps2.setInt(1, userId);
+                        try (ResultSet rs2 = ps2.executeQuery()) {
+                            if (rs2.next()) {
+                                return rs2.getInt("InnovatorID");
+                            }
+                        }
+                    }
+
+                    int innovatorId = 1;
+                    try (PreparedStatement ps2 = conn.prepareStatement("SELECT NVL(MAX(InnovatorID),0)+1 FROM INNOVATOR")) {
+                        try (ResultSet rs2 = ps2.executeQuery()) {
+                            if (rs2.next()) {
+                                innovatorId = rs2.getInt(1);
+                            }
+                        }
+                    }
+
+                    try (PreparedStatement ps2 = conn.prepareStatement(
+                            "INSERT INTO INNOVATOR (InnovatorID, UserID, DeptID, Name, Email, Phone, Expertise) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+                        ps2.setInt(1, innovatorId);
+                        ps2.setInt(2, userId);
+                        ps2.setInt(3, 1);
+                        ps2.setString(4, username);
+                        ps2.setString(5, username + "@local");
+                        ps2.setNull(6, java.sql.Types.VARCHAR);
+                        ps2.setNull(7, java.sql.Types.VARCHAR);
+                        ps2.executeUpdate();
+                    }
+                    return innovatorId;
+                }
+            }
+        }
+        return -1;
     }
 
     private void clearForm() {

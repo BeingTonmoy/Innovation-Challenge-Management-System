@@ -181,7 +181,9 @@ public class InnovationCall extends JFrame {
 
         logoutButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
-                System.exit(0);
+                setVisible(false);
+                Login frame = new Login();
+                frame.setVisible(true);
             }
         });
     }
