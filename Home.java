@@ -1,6 +1,6 @@
 import java.awt.*;
-import javax.swing.*;
 import java.awt.event.*;
+import javax.swing.*;
 
 public class Home extends JFrame {
 
@@ -14,7 +14,7 @@ public class Home extends JFrame {
     Home() {
         // Frame Layout
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        this.setTitle("HomeTutor - Home");
+        this.setTitle("INNOVATON CHALLENGE MANAGEMENT SYSTEM - Home");
         this.setSize(900, 600);
         this.setLocationRelativeTo(null);
         this.setResizable(false);
@@ -33,13 +33,13 @@ public class Home extends JFrame {
 
         // Title
         label1 = new JLabel();
-        label1.setText("Get your home tutor");
-        label1.setBounds(30, 55, 500, 65);
+        label1.setText("Manage your innovation");
+        label1.setBounds(30, 55, 800, 65);
         label1.setFont(f1);
         c.add(label1);
 
         label1 = new JLabel();
-        label1.setText("Get succeed in class");
+        label1.setText("Call for innovation");
         label1.setBounds(90, 120, 500, 65);
         label1.setFont(f1);
         c.add(label1);

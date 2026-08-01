@@ -67,7 +67,7 @@ public class Admin extends JFrame {
         ideaProposalButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 setVisible(false);
-                InnovationCell frame = new InnovationCell(username);
+                InnovationCall frame = new InnovationCall(username);
                 frame.setVisible(true);
             }
         });

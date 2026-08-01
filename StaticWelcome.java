@@ -18,7 +18,7 @@ public class StaticWelcome extends JFrame {
     StaticWelcome() {
         // Frame Layout
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        this.setTitle("INNOVATON MANAGEMENT SYSTEM - Welcome");
+        this.setTitle("INNOVATON CHALLENGE MANAGEMENT SYSTEM - Welcome");
         this.setSize(900, 600);
         this.setLocationRelativeTo(null);
         this.setResizable(false);
