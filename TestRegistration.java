@@ -1,3 +1,6 @@
+//******************American International University-Bangladesh (AIUB) */
+//******************Advanced Databse Management System (ADMS) Project - Innovation Management System (IMS) */
+//******************** Developed by Arfan Rahman Tonmoy (23-51598-2) (arfanrahman12@gmail.com) */
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

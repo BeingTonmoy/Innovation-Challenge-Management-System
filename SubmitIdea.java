@@ -1,3 +1,6 @@
+//******************American International University-Bangladesh (AIUB) */
+//******************Advanced Databse Management System (ADMS) Project - Innovation Management System (IMS) */
+//******************** Developed by Arfan Rahman Tonmoy (23-51598-2) (arfanrahman12@gmail.com) */
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
@@ -14,7 +17,7 @@ public class SubmitIdea extends JFrame {
     private JLabel descLabel;
     private JLabel categoryLabel;
     private JLabel attachmentLabel;
-    private JComboBox<CallItem> callCombo;
+    private JComboBox<DeptItem> departmentCombo;
     private JTextField ideaField;
     private JTextArea descArea;
     private JComboBox<String> categoryCombo;
@@ -51,15 +54,15 @@ public class SubmitIdea extends JFrame {
         titleLabel.setBounds(240, 40, 520, 40);
         c.add(titleLabel);
 
-        callLabel = new JLabel("Innovation Call:");
+        callLabel = new JLabel("Department:");
         callLabel.setFont(new Font("Segoe UI", Font.PLAIN, 22));
         callLabel.setBounds(40, 90, 300, 35);
         c.add(callLabel);
 
-        callCombo = new JComboBox<>();
-        callCombo.setFont(new Font("Segoe UI", Font.PLAIN, 20));
-        callCombo.setBounds(40, 130, 580, 45);
-        c.add(callCombo);
+        departmentCombo = new JComboBox<>();
+        departmentCombo.setFont(new Font("Segoe UI", Font.PLAIN, 20));
+        departmentCombo.setBounds(40, 130, 580, 45);
+        c.add(departmentCombo);
 
         ideaLabel = new JLabel("Idea Title:");
         ideaLabel.setFont(new Font("Segoe UI", Font.PLAIN, 22));
@@ -135,7 +138,7 @@ public class SubmitIdea extends JFrame {
         logoutButton.setBackground(Color.decode("#C00000"));
         c.add(logoutButton);
 
-        loadOpenCalls();
+        loadDepartments();
         loadCategories();
 
         chooseButton.addActionListener(new ActionListener() {
@@ -158,7 +161,7 @@ public class SubmitIdea extends JFrame {
         backButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 setVisible(false);
-                Home frame = new Home();
+                UserHome frame = new UserHome(username);
                 frame.setVisible(true);
             }
         });
@@ -170,21 +173,21 @@ public class SubmitIdea extends JFrame {
         });
     }
 
-    private void loadOpenCalls() {
-        callCombo.removeAllItems();
+    private void loadDepartments() {
+        departmentCombo.removeAllItems();
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT CALLID, TITLE FROM INNOVATION_CALL WHERE UPPER(STATUS) = 'OPEN' ORDER BY CALLID")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT DeptID, DeptName FROM DEPARTMENT ORDER BY DeptName")) {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    callCombo.addItem(new CallItem(rs.getInt("CALLID"), rs.getString("TITLE")));
+                    departmentCombo.addItem(new DeptItem(rs.getInt("DeptID"), rs.getString("DeptName")));
                 }
             }
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Failed to load open calls: " + e.getMessage(), "DB Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Failed to load departments: " + e.getMessage(), "DB Error", JOptionPane.ERROR_MESSAGE);
         }
-        if (callCombo.getItemCount() == 0) {
-            callCombo.addItem(new CallItem(0, "No open calls available"));
-            callCombo.setEnabled(false);
+        if (departmentCombo.getItemCount() == 0) {
+            departmentCombo.addItem(new DeptItem(0, "No departments available"));
+            departmentCombo.setEnabled(false);
         }
     }
 
@@ -211,13 +214,13 @@ public class SubmitIdea extends JFrame {
     }
 
     private void submitIdea() {
-        CallItem callItem = (CallItem) callCombo.getSelectedItem();
+        DeptItem deptItem = (DeptItem) departmentCombo.getSelectedItem();
         String title = ideaField.getText().trim();
         String description = descArea.getText().trim();
         String category = (String) categoryCombo.getSelectedItem();
 
-        if (callItem == null || callItem.getId() == 0) {
-            JOptionPane.showMessageDialog(this, "Please select an open innovation call.", "Validation", JOptionPane.WARNING_MESSAGE);
+        if (deptItem == null || deptItem.getId() == 0) {
+            JOptionPane.showMessageDialog(this, "Please select a department.", "Validation", JOptionPane.WARNING_MESSAGE);
             return;
         }
         if (title.isEmpty() || description.isEmpty() || category == null || category.isEmpty()) {
@@ -242,15 +245,35 @@ public class SubmitIdea extends JFrame {
                 throw new SQLException("No innovator profile was found for user: " + username);
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO IDEA (IDEAID, INNOVATORID, CALLID, TITLE, DESCRIPTION, CATEGORY, SUBMISSIONDATE, STATUS) " +
-                            "VALUES (?, ?, ?, ?, ?, ?, SYSDATE, 'PENDING')")) {
-                ps.setInt(1, ideaId);
-                ps.setInt(2, innovatorId);
-                ps.setInt(3, callItem.getId());
-                ps.setString(4, title);
-                ps.setString(5, description);
-                ps.setString(6, category);
+            ensureIdeaHasDeptColumn(conn);
+            boolean hasCallId = ideaColumnExists(conn, "CALLID");
+            Integer callId = null;
+            if (hasCallId) {
+                callId = resolveActiveCallId(conn);
+                if (callId == null) {
+                    throw new SQLException("No innovation call is available for idea submission. Please ask an administrator to create an active innovation call.");
+                }
+            }
+
+            String insertSql;
+            if (hasCallId) {
+                insertSql = "INSERT INTO IDEA (IDEAID, INNOVATORID, DEPTID, CALLID, TITLE, DESCRIPTION, CATEGORY, SUBMISSIONDATE, STATUS) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, SYSDATE, 'PENDING')";
+            } else {
+                insertSql = "INSERT INTO IDEA (IDEAID, INNOVATORID, DEPTID, TITLE, DESCRIPTION, CATEGORY, SUBMISSIONDATE, STATUS) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, SYSDATE, 'PENDING')";
+            }
+            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                int idx = 1;
+                ps.setInt(idx++, ideaId);
+                ps.setInt(idx++, innovatorId);
+                ps.setInt(idx++, deptItem.getId());
+                if (hasCallId) {
+                    ps.setInt(idx++, callId);
+                }
+                ps.setString(idx++, title);
+                ps.setString(idx++, description);
+                ps.setString(idx++, category);
                 ps.executeUpdate();
             }
 
@@ -336,7 +359,9 @@ public class SubmitIdea extends JFrame {
         descArea.setText("");
         attachmentField.setText("");
         selectedFile = null;
-        callCombo.setSelectedIndex(0);
+        if (departmentCombo.getItemCount() > 0) {
+            departmentCombo.setSelectedIndex(0);
+        }
         if (categoryCombo.getItemCount() > 0) {
             categoryCombo.setSelectedIndex(0);
         }
@@ -355,13 +380,69 @@ public class SubmitIdea extends JFrame {
         frame.setVisible(true);
     }
 
-    private static class CallItem {
-        private final int id;
-        private final String title;
+    private boolean ideaColumnExists(Connection conn, String columnName) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT 1 FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'IDEA' AND COLUMN_NAME = ?")) {
+            ps.setString(1, columnName.toUpperCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
 
-        public CallItem(int id, String title) {
+    private Integer resolveActiveCallId(Connection conn) throws SQLException {
+        if (!tableExists(conn, "INNOVATION_CALL")) {
+            return null;
+        }
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT CALLID FROM INNOVATION_CALL WHERE UPPER(STATUS) = 'OPEN' AND ROWNUM = 1")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("CALLID");
+                }
+            }
+        }
+
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT MIN(CALLID) FROM INNOVATION_CALL")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int callId = rs.getInt(1);
+                    return rs.wasNull() ? null : callId;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean tableExists(Connection conn, String tableName) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT 1 FROM USER_TABLES WHERE TABLE_NAME = ?")) {
+            ps.setString(1, tableName.toUpperCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private void ensureIdeaHasDeptColumn(Connection conn) throws SQLException {
+        DatabaseMetaData md = conn.getMetaData();
+        try (ResultSet rs = md.getColumns(null, null, "IDEA", "DEPTID")) {
+            if (!rs.next()) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE IDEA ADD (DEPTID NUMBER(6))");
+                }
+            }
+        }
+    }
+
+    private static class DeptItem {
+        private final int id;
+        private final String name;
+
+        public DeptItem(int id, String name) {
             this.id = id;
-            this.title = title;
+            this.name = name;
         }
 
         public int getId() {
@@ -370,7 +451,7 @@ public class SubmitIdea extends JFrame {
 
         @Override
         public String toString() {
-            return title;
+            return name;
         }
     }
 }

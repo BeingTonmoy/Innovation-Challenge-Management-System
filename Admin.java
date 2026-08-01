@@ -1,3 +1,6 @@
+//******************American International University-Bangladesh (AIUB) */
+//******************Advanced Databse Management System (ADMS) Project - Innovation Management System (IMS) */
+//******************** Developed by Arfan Rahman Tonmoy (23-51598-2) (arfanrahman12@gmail.com) */
 import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
@@ -52,7 +55,7 @@ public class Admin extends JFrame {
         c.add(instructionLabel);
 
         ideaProposalButton = createButton("Idea Proposal", 30, 170);
-        innovationCallButton = createButton("Innovation Call", 380, 170);
+        innovationCallButton = createButton("Project Manage", 380, 170);
         usersButton = createButton("Users", 30, 300);
         departmentsButton = createButton("Departments", 380, 300);
 
@@ -75,7 +78,7 @@ public class Admin extends JFrame {
         innovationCallButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 setVisible(false);
-                InnovationCall frame = new InnovationCall(username);
+                AdminProject frame = new AdminProject(username);
                 frame.setVisible(true);
             }
         });
@@ -103,6 +106,10 @@ public class Admin extends JFrame {
                 frame.setVisible(true);
             }
         });
+    }
+
+    public Admin() {
+        this("Admin");
     }
 
     private JButton createButton(String text, int x, int y) {

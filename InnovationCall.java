@@ -1,7 +1,6 @@
 //******************American International University-Bangladesh (AIUB) */
-//******************Object Oriented Programming 1 (JAVA) GUI Project - Group 5 | Date: 09/05/2024 */
+//******************Advanced Databse Management System (ADMS) Project - Innovation Management System (IMS) */
 //******************** Developed by Arfan Rahman Tonmoy (23-51598-2) (arfanrahman12@gmail.com) */
-//*********************Group Members :Arfan Rahman (23-51598-2), TANMAY ROY RONY (23-51745-2), Swarna sikder (23-51779-2), Sanjida Affrin Bristi (23-51788-2) */
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
@@ -64,7 +63,7 @@ public class InnovationCall extends JFrame {
         callStatsLabel.setBorder(BorderFactory.createLineBorder(Color.decode("#2E75B6"), 2));
         c.add(callStatsLabel);
 
-        String[] columns = {"Idea Title", "Innovator", "Category", "Status", "IdeaID"};
+        String[] columns = {"Idea Title", "Innovator", "Department", "Category", "Status", "IdeaID"};
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -72,7 +71,7 @@ public class InnovationCall extends JFrame {
             }
         };
         ideaTable = new JTable(tableModel);
-        ideaTable.removeColumn(ideaTable.getColumnModel().getColumn(4));
+        ideaTable.removeColumn(ideaTable.getColumnModel().getColumn(5));
         ideaTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         ideaTable.setRowHeight(28);
         JScrollPane tableScroll = new JScrollPane(ideaTable);
@@ -130,12 +129,6 @@ public class InnovationCall extends JFrame {
         backButton.setCursor(cursor);
         c.add(backButton);
 
-        passwordButton = new JButton("Change Pass");
-        passwordButton.setFont(new Font("Segoe UI", Font.PLAIN, 18));
-        passwordButton.setBounds(200, 550, 170, 40);
-        passwordButton.setCursor(cursor);
-        c.add(passwordButton);
-
         logoutButton = new JButton("Log out");
         logoutButton.setFont(new Font("Segoe UI", Font.PLAIN, 18));
         logoutButton.setBounds(390, 550, 150, 40);
@@ -167,17 +160,11 @@ public class InnovationCall extends JFrame {
         backButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 setVisible(false);
-                Home frame = new Home();
+                Admin frame = new Admin(username); // Return to Admin Dashboard with the current user
                 frame.setVisible(true);
             }
         });
 
-        passwordButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent ae) {
-                AdminPassword frame = new AdminPassword();
-                frame.setVisible(true);
-            }
-        });
 
         logoutButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
@@ -204,15 +191,20 @@ public class InnovationCall extends JFrame {
                 }
             }
 
+            ensureIdeaDeptColumnExists(conn);
+
             try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT i.IDEAID, i.TITLE, n.NAME, i.CATEGORY, i.STATUS " +
-                    "FROM IDEA i JOIN INNOVATOR n ON i.INNOVATORID = n.INNOVATORID " +
+                    "SELECT i.IDEAID, i.TITLE, n.NAME, d.DeptName AS DEPARTMENT, i.CATEGORY, i.STATUS " +
+                    "FROM IDEA i " +
+                    "JOIN INNOVATOR n ON i.INNOVATORID = n.INNOVATORID " +
+                    "LEFT JOIN DEPARTMENT d ON i.DEPTID = d.DeptID " +
                     "ORDER BY CASE WHEN UPPER(i.STATUS) = 'PENDING' THEN 1 ELSE 2 END, i.SUBMISSIONDATE DESC")) {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         Object[] row = {
                             rs.getString("TITLE"),
                             rs.getString("NAME"),
+                            rs.getString("DEPARTMENT"),
                             rs.getString("CATEGORY"),
                             rs.getString("STATUS"),
                             rs.getInt("IDEAID")
@@ -251,7 +243,14 @@ public class InnovationCall extends JFrame {
             return;
         }
 
-        int ideaId = (int) tableModel.getValueAt(selectedRow, 4);
+        Object ideaIdValue = tableModel.getValueAt(selectedRow, 5);
+        int ideaId;
+        try {
+            ideaId = Integer.parseInt(ideaIdValue.toString());
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(null, "Unable to determine selected idea ID.", "Data Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         String newStatus = decision.equals("APPROVED") ? "Approved" : "Rejected";
 
         try (Connection conn = DBConnection.getConnection()) {
@@ -298,5 +297,25 @@ public class InnovationCall extends JFrame {
     public static void main(String[] args) {
         InnovationCall frame = new InnovationCall("Admin");
         frame.setVisible(true);
+    }
+
+    private void ensureIdeaDeptColumnExists(Connection conn) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT 1 FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'IDEA' AND COLUMN_NAME = 'DEPTID'")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return;
+                }
+            }
+        }
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE IDEA ADD (DEPTID NUMBER(6))");
+        } catch (SQLException e) {
+            String msg = e.getMessage().toUpperCase();
+            if (!msg.contains("ORA-01430") && !msg.contains("ORA-01450") && !msg.contains("COLUMN BEING ADDED ALREADY EXISTS")) {
+                throw e;
+            }
+        }
     }
 }
