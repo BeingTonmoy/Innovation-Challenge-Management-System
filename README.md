@@ -17,7 +17,7 @@ A Java Swing desktop application for managing innovation ideas, departments, eva
 - Compatibility checks for older database schemas.
 - PL/SQL procedures for registration and project creation with Java/JDBC fallback.
 
-## Project Structure
+## Project Structures
 
 | File | Responsibility |
 | --- | --- |
