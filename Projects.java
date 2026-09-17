@@ -441,19 +441,24 @@ public class Projects extends JFrame {
         DefaultComboBoxModel<ProjectOption> model = new DefaultComboBoxModel<>();
         projectCombo.setModel(model);
         try (Connection conn = DBConnection.getConnection()) {
-            loggedInnovatorId = resolveLoggedInnovatorId(conn);
-            if (loggedInnovatorId <= 0) {
-                JOptionPane.showMessageDialog(this, "No innovator profile was found for this user.", "User Not Found", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
             try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT IDEAID, TITLE FROM IDEA WHERE INNOVATORID = ? AND UPPER(STATUS) = 'APPROVED' ORDER BY IDEAID")) {
-                ps.setInt(1, loggedInnovatorId);
+                    "SELECT i.IDEAID, i.TITLE, n.INNOVATORID " +
+                            "FROM IDEA i " +
+                            "JOIN INNOVATOR n ON i.INNOVATORID = n.INNOVATORID " +
+                            "JOIN USER_ACCOUNT ua ON n.USERID = ua.USERID " +
+                            "WHERE UPPER(ua.USERNAME) = UPPER(?) " +
+                            "AND UPPER(TRIM(i.STATUS)) IN ('APPROVED', 'ACCEPTED') " +
+                            "ORDER BY i.IDEAID")) {
+                ps.setString(1, username);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
+                        loggedInnovatorId = rs.getInt("INNOVATORID");
                         model.addElement(new ProjectOption(rs.getInt("IDEAID"), rs.getString("TITLE")));
                     }
                 }
+            }
+            if (model.getSize() == 0) {
+                loggedInnovatorId = resolveLoggedInnovatorId(conn);
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Unable to load accepted ideas: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
@@ -562,17 +567,14 @@ public class Projects extends JFrame {
             try (Connection conn = DBConnection.getConnection()) {
                 int projectId = currentProjectId > 0 ? currentProjectId : nextId(conn, "INNOVATION_PROJECT", "PROJECTID");
                 if (currentProjectId <= 0) {
-                    String insertSql = "INSERT INTO INNOVATION_PROJECT (PROJECTID, IDEAID, PROJECTTITLE, STARTDATE, ENDDATE, STATUS, DESCRIPTION) VALUES (?, ?, ?, ?, ?, ?, ?)";
-                    try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-                        ps.setInt(1, projectId);
-                        ps.setInt(2, currentIdeaId);
-                        ps.setString(3, ((ProjectOption) projectCombo.getSelectedItem()).title);
-                        ps.setDate(4, java.sql.Date.valueOf(startDate));
-                        ps.setDate(5, java.sql.Date.valueOf(endDate));
-                        ps.setString(6, statusCombo.getSelectedItem().toString());
-                        ps.setString(7, descriptionArea.getText().trim());
-                        ps.executeUpdate();
-                    }
+                    projectId = DBConnection.createProjectWithProcedure(
+                            conn,
+                            currentIdeaId,
+                            ((ProjectOption) projectCombo.getSelectedItem()).title,
+                            java.sql.Date.valueOf(startDate),
+                            java.sql.Date.valueOf(endDate),
+                            statusCombo.getSelectedItem().toString(),
+                            descriptionArea.getText().trim());
                 } else {
                     try (PreparedStatement ps = conn.prepareStatement(
                             "UPDATE INNOVATION_PROJECT SET PROJECTTITLE = ?, STARTDATE = ?, ENDDATE = ?, STATUS = ?, DESCRIPTION = ? WHERE PROJECTID = ?")) {

@@ -186,35 +186,10 @@ public class Registration extends JFrame {
                         }
                     }
 
-                    int finalUserId;
-                    try (PreparedStatement s1 = conn.prepareStatement("SELECT user_seq.NEXTVAL FROM DUAL"); ResultSet r1 = s1.executeQuery()) {
-                        if (r1.next()) finalUserId = r1.getInt(1);
-                        else throw new SQLException("Failed to get next user_seq value.");
-                    }
-
                     String hashedPassword = hashPassword(textFieldPassword);
 
-                    try (PreparedStatement insUser = conn.prepareStatement(
-                            "INSERT INTO USER_ACCOUNT (UserID, Username, PasswordHash, Role, Email, Status) VALUES (?, ?, ?, ?, ?, 'ACTIVE')")) {
-                        insUser.setInt(1, finalUserId);
-                        insUser.setString(2, textFieldUsername);
-                        insUser.setString(3, hashedPassword);
-                        insUser.setString(4, "INNOVATOR"); // set default role to INNOVATOR
-                        insUser.setString(5, textFieldEmail);
-                        insUser.executeUpdate();
-                    }
-
-                    // create innovator record (assign DeptID = 1 by default)
-                    try (PreparedStatement insInnov = conn.prepareStatement(
-                            "INSERT INTO INNOVATOR (InnovatorID, UserID, DeptID, Name, Email, Phone, Expertise) VALUES (innovator_seq.NEXTVAL, ?, ?, ?, ?, ?, ?)")) {
-                        insInnov.setInt(1, finalUserId);
-                        insInnov.setInt(2, 1); // default DeptID
-                        insInnov.setString(3, textFieldUsername); // name
-                        insInnov.setString(4, textFieldEmail);
-                        insInnov.setString(5, null);
-                        insInnov.setString(6, null);
-                        insInnov.executeUpdate();
-                    }
+                    int finalUserId = DBConnection.createUserAccountWithProcedure(
+                            conn, textFieldUsername, hashedPassword, textFieldEmail, textFieldUsername, 1);
 
                     conn.commit();
                     JOptionPane.showMessageDialog(null, "Registration Successfully Completed.", "Registration Complete", JOptionPane.INFORMATION_MESSAGE);
