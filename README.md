@@ -75,7 +75,7 @@ The complete initial Oracle schema is provided in [IMS_SCHEMA.sql](IMS_SCHEMA.sq
 `DBConnection.getConnection()` attempts the configured Oracle URLs in order. After connecting, it performs compatibility setup:
 
 1. Ensures the administrator table exists.
-2. Ensures the `USER_SEQ` and `INNOVATOR_SEQ` sequences exist when possible.
+2. Ensures the ten entity sequences (`DEPT_SEQ`, `USER_SEQ`, `INNOVATOR_SEQ`, `ADMIN_SEQ`, `CALL_SEQ`, `IDEA_SEQ`, `EVAL_SEQ`, `ATTACH_SEQ`, `PROJECT_SEQ`, and `MEMBER_SEQ`) exist and are advanced past existing IDs when possible.
 3. Creates or updates the PL/SQL procedures described below when the account has permission.
 4. Initializes the default administrator record when possible.
 
@@ -95,6 +95,8 @@ The application expects these main tables, either pre-created or created/upgrade
 - `PROJECT_MEMBER`
 
 Existing schemas may contain additional columns. The application uses metadata checks for optional columns such as `IDEA.DEPTID`, `PROJECT_MEMBER.JOINDATE`, and project description/status fields.
+
+The updated schema uses `PROJECT_MEMBER.JOINEDDATE` and includes `INNOVATION_CALL.ADMINID`. The application uses `JOINEDDATE` for the current schema and retains compatibility handling for older project-member layouts.
 
 ## Compile and Run
 

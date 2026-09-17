@@ -255,33 +255,31 @@ public class InnovationCall extends JFrame {
 
         try (Connection conn = DBConnection.getConnection()) {
             conn.setAutoCommit(false);
-
-            int evaluationId = 1;
-            try (PreparedStatement seqStmt = conn.prepareStatement("SELECT NVL(MAX(EVALUATIONID),0)+1 FROM EVALUATION")) {
-                try (ResultSet rs = seqStmt.executeQuery()) {
-                    if (rs.next()) {
-                        evaluationId = rs.getInt(1);
-                    }
+            int adminId = DBConnection.resolveAdminId(conn, username);
+            try (CallableStatement evaluate = conn.prepareCall("{ call IMS_EVALUATE_IDEA(?, ?, ?, ?, ?) }")) {
+                evaluate.setInt(1, ideaId);
+                evaluate.setInt(2, adminId);
+                evaluate.setInt(3, score);
+                evaluate.setString(4, comments);
+                evaluate.setString(5, newStatus.toUpperCase());
+                evaluate.execute();
+            } catch (SQLException procedureError) {
+                try (PreparedStatement insertEval = conn.prepareStatement(
+                        "INSERT INTO EVALUATION (EVALUATIONID, IDEAID, ADMINID, EVALUATIONDATE, SCORE, COMMENTS, DECISIONSTATUS) " +
+                                "VALUES (EVAL_SEQ.NEXTVAL, ?, ?, SYSDATE, ?, ?, ?)")) {
+                    insertEval.setInt(1, ideaId);
+                    insertEval.setInt(2, adminId);
+                    insertEval.setInt(3, score);
+                    insertEval.setString(4, comments);
+                    insertEval.setString(5, newStatus.toUpperCase());
+                    insertEval.executeUpdate();
                 }
-            }
-
-            try (PreparedStatement insertEval = conn.prepareStatement(
-                    "INSERT INTO EVALUATION (EVALUATIONID, IDEAID, ADMINID, EVALUATIONDATE, SCORE, COMMENTS, DECISIONSTATUS) " +
-                            "VALUES (?, ?, ?, SYSDATE, ?, ?, ? )")) {
-                insertEval.setInt(1, evaluationId);
-                insertEval.setInt(2, ideaId);
-                insertEval.setInt(3, 100001);
-                insertEval.setInt(4, score);
-                insertEval.setString(5, comments);
-                insertEval.setString(6, decision);
-                insertEval.executeUpdate();
-            }
-
-            try (PreparedStatement updateIdea = conn.prepareStatement(
-                    "UPDATE IDEA SET STATUS = ? WHERE IDEAID = ?")) {
-                updateIdea.setString(1, newStatus.toUpperCase());
-                updateIdea.setInt(2, ideaId);
-                updateIdea.executeUpdate();
+                try (PreparedStatement updateIdea = conn.prepareStatement(
+                        "UPDATE IDEA SET STATUS = ? WHERE IDEAID = ?")) {
+                    updateIdea.setString(1, newStatus.toUpperCase());
+                    updateIdea.setInt(2, ideaId);
+                    updateIdea.executeUpdate();
+                }
             }
 
             conn.commit();

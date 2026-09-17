@@ -211,7 +211,7 @@ public class Departments extends JFrame {
         }
 
         try (Connection conn = DBConnection.getConnection()) {
-            int deptId = nextId(conn, "DEPARTMENT", "DeptID");
+            int deptId = nextSequenceValue(conn, "DEPT_SEQ");
             try (PreparedStatement ps = conn.prepareStatement("INSERT INTO DEPARTMENT (DeptID, DeptName, Description, Location) VALUES (?, ?, ?, ?)") ) {
                 ps.setInt(1, deptId);
                 ps.setString(2, name);
@@ -292,6 +292,17 @@ public class Departments extends JFrame {
             }
         }
         return 1;
+    }
+
+    private int nextSequenceValue(Connection conn, String sequenceName) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT " + sequenceName + ".NEXTVAL FROM DUAL")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        return nextId(conn, "DEPARTMENT", "DeptID");
     }
 
     public static void main(String[] args) {

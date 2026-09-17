@@ -3,7 +3,6 @@
 //******************** Developed by Arfan Rahman Tonmoy (23-51598-2) (arfanrahman12@gmail.com) */
 import java.sql.CallableStatement;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -26,8 +25,8 @@ public class DBConnection {
 
     private static final String DEFAULT_USER = "scott";
     private static final String DEFAULT_PASSWORD = "tiger";
-    private static final int DEFAULT_ADMIN_ID = 100001;
-    private static final String DEFAULT_ADMIN_NAME = "adminPass";
+    private static final int DEFAULT_ADMIN_ID = 1;
+    private static final String DEFAULT_ADMIN_NAME = "Admin";
 
     public static Connection getConnection() throws SQLException {
         String user = System.getProperty("oracle.user", DEFAULT_USER);
@@ -43,7 +42,6 @@ public class DBConnection {
         for (String url : URL_CANDIDATES) {
             try {
                 Connection connection = DriverManager.getConnection(url, user, password);
-                ensureAdminUser(connection);
                 ensureSequences(connection);
                 ensurePlSqlObjects(connection);
                 return connection;
@@ -58,15 +56,17 @@ public class DBConnection {
     }
 
     private static void ensureSequences(Connection connection) {
-        String[] seqNames = {"USER_SEQ", "INNOVATOR_SEQ"};
+        String[] seqNames = {"DEPT_SEQ", "USER_SEQ", "INNOVATOR_SEQ", "ADMIN_SEQ", "CALL_SEQ",
+            "IDEA_SEQ", "EVAL_SEQ", "ATTACH_SEQ", "PROJECT_SEQ", "MEMBER_SEQ"};
         for (String seq : seqNames) {
             try (PreparedStatement ps = connection.prepareStatement("SELECT COUNT(*) FROM user_sequences WHERE sequence_name = ?")) {
                 ps.setString(1, seq);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next() && rs.getInt(1) == 0) {
                         // sequence missing - attempt to create with start value = NVL(MAX(id),0)+1
-                        String idColumn = seq.equals("USER_SEQ") ? "UserID" : "InnovatorID";
-                        String tableName = seq.equals("USER_SEQ") ? "USER_ACCOUNT" : "INNOVATOR";
+                        String[] sequenceDetails = sequenceDetails(seq);
+                        String idColumn = sequenceDetails[1];
+                        String tableName = sequenceDetails[0];
                         long startWith = 1;
                         try (PreparedStatement pmax = connection.prepareStatement("SELECT NVL(MAX(" + idColumn + "),0)+1 FROM " + tableName)) {
                             try (ResultSet rmax = pmax.executeQuery()) {
@@ -82,10 +82,40 @@ public class DBConnection {
                             stmt.execute(createSql);
                         }
                     }
+                    advanceSequencePastMaximum(connection, seq);
                 }
             } catch (SQLException e) {
                 // ignore - user may not have privileges to query or create sequences
             }
+        }
+    }
+
+    private static void advanceSequencePastMaximum(Connection connection, String sequenceName) {
+        String[] details = sequenceDetails(sequenceName);
+        String block = "DECLARE v_next NUMBER; v_max NUMBER; BEGIN " +
+                "SELECT NVL(MAX(" + details[1] + "), 0) INTO v_max FROM " + details[0] + "; " +
+                "LOOP SELECT " + sequenceName + ".NEXTVAL INTO v_next FROM DUAL; " +
+                "EXIT WHEN v_next > v_max; END LOOP; END;";
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(block);
+        } catch (SQLException e) {
+            // Keep compatibility with accounts that cannot inspect or advance a sequence.
+        }
+    }
+
+    private static String[] sequenceDetails(String sequenceName) {
+        switch (sequenceName) {
+            case "DEPT_SEQ": return new String[]{"DEPARTMENT", "DEPTID"};
+            case "USER_SEQ": return new String[]{"USER_ACCOUNT", "USERID"};
+            case "INNOVATOR_SEQ": return new String[]{"INNOVATOR", "INNOVATORID"};
+            case "ADMIN_SEQ": return new String[]{"ADMIN_USER", "ADMINID"};
+            case "CALL_SEQ": return new String[]{"INNOVATION_CALL", "CALLID"};
+            case "IDEA_SEQ": return new String[]{"IDEA", "IDEAID"};
+            case "EVAL_SEQ": return new String[]{"EVALUATION", "EVALUATIONID"};
+            case "ATTACH_SEQ": return new String[]{"ATTACHMENT", "ATTACHMENTID"};
+            case "PROJECT_SEQ": return new String[]{"INNOVATION_PROJECT", "PROJECTID"};
+            case "MEMBER_SEQ": return new String[]{"PROJECT_MEMBER", "MEMBERID"};
+            default: throw new IllegalArgumentException("Unknown sequence: " + sequenceName);
         }
     }
 
@@ -113,9 +143,7 @@ public class DBConnection {
     private static void ensurePlSqlObjects(Connection connection) {
         String initProcSql = "CREATE OR REPLACE PROCEDURE IMS_INIT_APP AS " +
                 "BEGIN " +
-                "  INSERT INTO ADMIN_USER (AdminID, UserID, Name, Email, Phone) " +
-                "  SELECT 100001, 1, 'adminPass', NULL, NULL FROM DUAL " +
-                "  WHERE NOT EXISTS (SELECT 1 FROM ADMIN_USER WHERE AdminID = 100001); " +
+                "  NULL; " +
                 "END;";
 
         String registerProcSql = "CREATE OR REPLACE PROCEDURE IMS_REGISTER_USER(" +
@@ -131,8 +159,8 @@ public class DBConnection {
                 "  SELECT user_seq.NEXTVAL INTO p_userid FROM DUAL; " +
                 "  INSERT INTO USER_ACCOUNT (UserID, Username, PasswordHash, Role, Email, Status) " +
                 "  VALUES (p_userid, p_username, p_passwordhash, 'INNOVATOR', p_email, 'ACTIVE'); " +
-                "  INSERT INTO INNOVATOR (InnovatorID, UserID, DeptID, Name, Email, Phone, Expertise) " +
-                "  VALUES (innovator_seq.NEXTVAL, p_userid, p_deptid, p_name, p_email, NULL, NULL); " +
+                "  INSERT INTO INNOVATOR (InnovatorID, UserID, DeptID, Name, Email, Phone, Expertise, DateJoined) " +
+                "  VALUES (innovator_seq.NEXTVAL, p_userid, NVL(p_deptid, (SELECT MIN(DeptID) FROM DEPARTMENT)), p_name, p_email, NULL, NULL, SYSDATE); " +
                 "  SELECT innovator_seq.CURRVAL INTO p_innovatorid FROM DUAL; " +
                 "END;";
 
@@ -146,15 +174,35 @@ public class DBConnection {
                 "  p_projectid OUT NUMBER " +
                 ") AS " +
                 "BEGIN " +
-                "  SELECT NVL(MAX(PROJECTID), 0) + 1 INTO p_projectid FROM INNOVATION_PROJECT; " +
+                "  SELECT project_seq.NEXTVAL INTO p_projectid FROM DUAL; " +
                 "  INSERT INTO INNOVATION_PROJECT (PROJECTID, IDEAID, PROJECTTITLE, STARTDATE, ENDDATE, STATUS, DESCRIPTION) " +
                 "  VALUES (p_projectid, p_ideaid, p_title, p_startdate, p_enddate, p_status, p_description); " +
+                "END;";
+
+            String evaluateProcSql = "CREATE OR REPLACE PROCEDURE IMS_EVALUATE_IDEA(" +
+                " p_ideaid IN NUMBER, p_adminid IN NUMBER, p_score IN NUMBER, " +
+                " p_comments IN VARCHAR2, p_decision IN VARCHAR2) AS " +
+                "BEGIN " +
+                " INSERT INTO EVALUATION (EvaluationID, IdeaID, AdminID, EvaluationDate, Score, Comments, DecisionStatus) " +
+                " VALUES (eval_seq.NEXTVAL, p_ideaid, p_adminid, SYSDATE, p_score, p_comments, p_decision); " +
+                " UPDATE IDEA SET Status = p_decision WHERE IdeaID = p_ideaid; " +
+                "END;";
+
+            String memberProcSql = "CREATE OR REPLACE PROCEDURE IMS_ADD_PROJECT_MEMBER(" +
+                " p_projectid IN NUMBER, p_innovatorid IN NUMBER, p_inserted OUT NUMBER) AS " +
+                "BEGIN " +
+                " INSERT INTO PROJECT_MEMBER (MemberID, ProjectID, InnovatorID, Role, JoinedDate, Status) " +
+                " SELECT member_seq.NEXTVAL, p_projectid, p_innovatorid, 'Member', SYSDATE, 'ACTIVE' FROM DUAL " +
+                " WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE ProjectID = p_projectid AND InnovatorID = p_innovatorid); " +
+                " p_inserted := SQL%ROWCOUNT; " +
                 "END;";
 
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(initProcSql);
             stmt.execute(registerProcSql);
             stmt.execute(projectProcSql);
+            stmt.execute(evaluateProcSql);
+            stmt.execute(memberProcSql);
             try (java.sql.CallableStatement cs = connection.prepareCall("{ call IMS_INIT_APP() }")) {
                 cs.execute();
             }
@@ -162,6 +210,27 @@ public class DBConnection {
             // keep compatibility with Oracle accounts that do not permit procedure creation or if the table is not ready yet
             // the core Java SQL flow remains available and will continue to work.
         }
+    }
+
+    public static int resolveAdminId(Connection conn, String username) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT au.AdminID FROM ADMIN_USER au JOIN USER_ACCOUNT ua ON ua.UserID = au.UserID " +
+                        "WHERE UPPER(ua.Username) = UPPER(?) ORDER BY au.AdminID")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        try (PreparedStatement ps = conn.prepareStatement("SELECT MIN(AdminID) FROM ADMIN_USER")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && !rs.wasNull()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        throw new SQLException("No administrator record is available.");
     }
 
     public static int createUserAccountWithProcedure(Connection conn, String username, String passwordHash,
@@ -253,44 +322,14 @@ public class DBConnection {
         }
     }
 
-    private static void ensureAdminUser(Connection connection) throws SQLException {
-        DatabaseMetaData metaData = connection.getMetaData();
-        try (ResultSet rs = metaData.getTables(null, null, "ADMIN_USER", new String[]{"TABLE"})) {
-            if (!rs.next()) {
-                try (Statement statement = connection.createStatement()) {
-                    statement.execute("CREATE TABLE ADMIN_USER (AdminID NUMBER(6) NOT NULL, UserID NUMBER(6) NOT NULL, Name VARCHAR2(60) NOT NULL, Email VARCHAR2(80), Phone VARCHAR2(20), CONSTRAINT pk_admin PRIMARY KEY (AdminID))");
-                }
-            }
-        }
-
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("ALTER TABLE ADMIN_USER ADD CONSTRAINT fk_admin_user FOREIGN KEY (UserID) REFERENCES USER_ACCOUNT(UserID)");
-        } catch (SQLException e) {
-            if (e.getErrorCode() != 942 && e.getErrorCode() != 2275 && e.getErrorCode() != 2264) {
-                throw e;
-            }
-        }
-
-        try (PreparedStatement checkStatement = connection.prepareStatement(
-                "SELECT COUNT(*) FROM ADMIN_USER WHERE AdminID = ?")) {
-            checkStatement.setInt(1, DEFAULT_ADMIN_ID);
-            try (ResultSet rs = checkStatement.executeQuery()) {
-                if (rs.next() && rs.getInt(1) == 0) {
-                    try (PreparedStatement insertStatement = connection.prepareStatement(
-                            "INSERT INTO ADMIN_USER (AdminID, UserID, Name, Email, Phone) VALUES (?, ?, ?, ?, ?)")) {
-                        insertStatement.setInt(1, DEFAULT_ADMIN_ID);
-                        insertStatement.setInt(2, 1);
-                        insertStatement.setString(3, DEFAULT_ADMIN_NAME);
-                        insertStatement.setNull(4, java.sql.Types.VARCHAR);
-                        insertStatement.setNull(5, java.sql.Types.VARCHAR);
-                        insertStatement.executeUpdate();
-                    } catch (SQLException e) {
-                        if (e.getErrorCode() != 2291) {
-                            throw e;
-                        }
-                    }
-                }
-            }
+    public static boolean addProjectMemberWithProcedure(Connection conn, int projectId, int innovatorId) throws SQLException {
+        try (CallableStatement cs = conn.prepareCall("{ call IMS_ADD_PROJECT_MEMBER(?, ?, ?) }")) {
+            cs.setInt(1, projectId);
+            cs.setInt(2, innovatorId);
+            cs.registerOutParameter(3, Types.INTEGER);
+            cs.execute();
+            return cs.getInt(3) > 0;
         }
     }
+
 }

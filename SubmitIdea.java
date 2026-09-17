@@ -231,14 +231,7 @@ public class SubmitIdea extends JFrame {
         try (Connection conn = DBConnection.getConnection()) {
             conn.setAutoCommit(false);
 
-            int ideaId = 1;
-            try (PreparedStatement ps = conn.prepareStatement("SELECT NVL(MAX(IDEAID),0)+1 FROM IDEA")) {
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        ideaId = rs.getInt(1);
-                    }
-                }
-            }
+            int ideaId = nextSequenceValue(conn, "IDEA_SEQ", "IDEA", "IDEAID");
 
             int innovatorId = resolveInnovatorId(conn);
             if (innovatorId <= 0) {
@@ -279,13 +272,7 @@ public class SubmitIdea extends JFrame {
 
             if (selectedFile != null && selectedFile.exists()) {
                 int attachmentId = 1;
-                try (PreparedStatement ps = conn.prepareStatement("SELECT NVL(MAX(ATTACHMENTID),0)+1 FROM ATTACHMENT")) {
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) {
-                            attachmentId = rs.getInt(1);
-                        }
-                    }
-                }
+                attachmentId = nextSequenceValue(conn, "ATTACH_SEQ", "ATTACHMENT", "ATTACHMENTID");
                 String filename = selectedFile.getName();
                 String fileType = getFileExtension(selectedFile.getName());
                 long fileSize = selectedFile.length();
@@ -352,6 +339,26 @@ public class SubmitIdea extends JFrame {
             }
         }
         return -1;
+    }
+
+    private int nextSequenceValue(Connection conn, String sequenceName, String tableName, String columnName) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT " + sequenceName + ".NEXTVAL FROM DUAL")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException sequenceError) {
+            // Compatibility fallback for an older schema without the named sequence.
+        }
+        try (PreparedStatement ps = conn.prepareStatement("SELECT NVL(MAX(" + columnName + "), 0) + 1 FROM " + tableName)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        return 1;
     }
 
     private void clearForm() {

@@ -327,12 +327,12 @@ public class Projects extends JFrame {
             }
             if (!tableExists(conn, "PROJECT_MEMBER")) {
                 try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("CREATE TABLE PROJECT_MEMBER (PROJECTID NUMBER(10), INNOVATORID NUMBER(10), JOINDATE DATE, PRIMARY KEY (PROJECTID, INNOVATORID))");
+                    stmt.execute("CREATE TABLE PROJECT_MEMBER (MEMBERID NUMBER(10) NOT NULL, PROJECTID NUMBER(10), INNOVATORID NUMBER(10), ROLE VARCHAR2(40), JOINEDDATE DATE DEFAULT SYSDATE, STATUS VARCHAR2(10) DEFAULT 'ACTIVE', PRIMARY KEY (MEMBERID), CONSTRAINT UQ_PROJECT_MEMBER UNIQUE (PROJECTID, INNOVATORID), CONSTRAINT CK_MEMBER_STATUS CHECK (STATUS IN ('ACTIVE','COMPLETED')))");
                 }
             } else {
-                if (!columnExists(conn, "PROJECT_MEMBER", "JOINDATE")) {
+                if (!columnExists(conn, "PROJECT_MEMBER", "JOINEDDATE")) {
                     try (Statement stmt = conn.createStatement()) {
-                        stmt.execute("ALTER TABLE PROJECT_MEMBER ADD (JOINDATE DATE)");
+                        stmt.execute("ALTER TABLE PROJECT_MEMBER ADD (JOINEDDATE DATE DEFAULT SYSDATE)");
                     }
                 }
             }
@@ -360,9 +360,9 @@ public class Projects extends JFrame {
             return;
         }
         try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT pm.INNOVATORID, NVL(i.Name, 'Unknown') AS NAME, pm.JOINDATE " +
+                "SELECT pm.INNOVATORID, NVL(i.Name, 'Unknown') AS NAME, pm.JOINEDDATE AS JOINDATE " +
                 "FROM PROJECT_MEMBER pm LEFT JOIN INNOVATOR i ON pm.INNOVATORID = i.INNOVATORID " +
-                "WHERE pm.PROJECTID = ? ORDER BY pm.JOINDATE")) {
+            "WHERE pm.PROJECTID = ? ORDER BY pm.JOINEDDATE")) {
             ps.setInt(1, currentProjectId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -565,7 +565,7 @@ public class Projects extends JFrame {
                 return;
             }
             try (Connection conn = DBConnection.getConnection()) {
-                int projectId = currentProjectId > 0 ? currentProjectId : nextId(conn, "INNOVATION_PROJECT", "PROJECTID");
+                int projectId = currentProjectId;
                 if (currentProjectId <= 0) {
                     projectId = DBConnection.createProjectWithProcedure(
                             conn,
@@ -607,32 +607,32 @@ public class Projects extends JFrame {
             return;
         }
         try (Connection conn = DBConnection.getConnection()) {
-            boolean hasJoinDate = columnExists(conn, "PROJECT_MEMBER", "JOINDATE");
+            boolean hasJoinDate = columnExists(conn, "PROJECT_MEMBER", "JOINEDDATE");
             boolean hasMemberId = columnExists(conn, "PROJECT_MEMBER", "MEMBERID");
-            int memberId = -1;
-            if (hasMemberId) {
-                memberId = nextId(conn, "PROJECT_MEMBER", "MEMBERID");
-            }
-            String insertSql;
-            if (hasMemberId && hasJoinDate) {
-                insertSql = "INSERT INTO PROJECT_MEMBER (MEMBERID, PROJECTID, INNOVATORID, JOINDATE) SELECT ?, ?, ?, SYSDATE FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
-            } else if (hasMemberId) {
-                insertSql = "INSERT INTO PROJECT_MEMBER (MEMBERID, PROJECTID, INNOVATORID) SELECT ?, ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
-            } else if (hasJoinDate) {
-                insertSql = "INSERT INTO PROJECT_MEMBER (PROJECTID, INNOVATORID, JOINDATE) SELECT ?, ?, SYSDATE FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
-            } else {
-                insertSql = "INSERT INTO PROJECT_MEMBER (PROJECTID, INNOVATORID) SELECT ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
-            }
-            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-                int idx = 1;
-                if (hasMemberId) {
-                    ps.setInt(idx++, memberId);
+            int updated;
+            try {
+                updated = DBConnection.addProjectMemberWithProcedure(conn, currentProjectId, currentInnovatorId) ? 1 : 0;
+            } catch (SQLException procedureError) {
+                String insertSql;
+                if (hasMemberId && hasJoinDate) {
+                    insertSql = "INSERT INTO PROJECT_MEMBER (MEMBERID, PROJECTID, INNOVATORID, JOINEDDATE) SELECT MEMBER_SEQ.NEXTVAL, ?, ?, SYSDATE FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
+                } else if (hasMemberId) {
+                    insertSql = "INSERT INTO PROJECT_MEMBER (MEMBERID, PROJECTID, INNOVATORID) SELECT MEMBER_SEQ.NEXTVAL, ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
+                } else if (hasJoinDate) {
+                    insertSql = "INSERT INTO PROJECT_MEMBER (PROJECTID, INNOVATORID, JOINEDDATE) SELECT ?, ?, SYSDATE FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
+                } else {
+                    insertSql = "INSERT INTO PROJECT_MEMBER (PROJECTID, INNOVATORID) SELECT ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PROJECT_MEMBER WHERE PROJECTID = ? AND INNOVATORID = ?)";
                 }
-                ps.setInt(idx++, currentProjectId);
-                ps.setInt(idx++, currentInnovatorId);
-                ps.setInt(idx++, currentProjectId);
-                ps.setInt(idx++, currentInnovatorId);
-                int updated = ps.executeUpdate();
+                try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                    int idx = 1;
+                    ps.setInt(idx++, currentProjectId);
+                    ps.setInt(idx++, currentInnovatorId);
+                    ps.setInt(idx++, currentProjectId);
+                    ps.setInt(idx++, currentInnovatorId);
+                    updated = ps.executeUpdate();
+                }
+            }
+            {
                 if (updated > 0) {
                     JOptionPane.showMessageDialog(this, "Innovator added to project.", "Success", JOptionPane.INFORMATION_MESSAGE);
                 } else {

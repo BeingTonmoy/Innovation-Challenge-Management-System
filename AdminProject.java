@@ -265,11 +265,11 @@ public class AdminProject extends JFrame {
             }
             if (!tableExists(conn, "PROJECT_MEMBER")) {
                 try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("CREATE TABLE PROJECT_MEMBER (PROJECTID NUMBER(10), INNOVATORID NUMBER(10), JOINDATE DATE, PRIMARY KEY (PROJECTID, INNOVATORID))");
+                    stmt.execute("CREATE TABLE PROJECT_MEMBER (MEMBERID NUMBER(10) NOT NULL, PROJECTID NUMBER(10), INNOVATORID NUMBER(10), ROLE VARCHAR2(40), JOINEDDATE DATE DEFAULT SYSDATE, STATUS VARCHAR2(10) DEFAULT 'ACTIVE', PRIMARY KEY (MEMBERID), CONSTRAINT UQ_PROJECT_MEMBER UNIQUE (PROJECTID, INNOVATORID), CONSTRAINT CK_MEMBER_STATUS CHECK (STATUS IN ('ACTIVE','COMPLETED')))");
                 }
-            } else if (!columnExists(conn, "PROJECT_MEMBER", "JOINDATE")) {
+            } else if (!columnExists(conn, "PROJECT_MEMBER", "JOINEDDATE")) {
                 try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("ALTER TABLE PROJECT_MEMBER ADD (JOINDATE DATE)");
+                    stmt.execute("ALTER TABLE PROJECT_MEMBER ADD (JOINEDDATE DATE DEFAULT SYSDATE)");
                 }
             }
         } catch (SQLException e) {
@@ -357,7 +357,7 @@ public class AdminProject extends JFrame {
         }
 
         try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT pm.INNOVATORID, NVL(i.NAME, 'Unknown') AS NAME, pm.JOINDATE FROM PROJECT_MEMBER pm LEFT JOIN INNOVATOR i ON pm.INNOVATORID = i.INNOVATORID WHERE pm.PROJECTID = ? ORDER BY pm.JOINDATE")) {
+                "SELECT pm.INNOVATORID, NVL(i.NAME, 'Unknown') AS NAME, pm.JOINEDDATE AS JOINDATE FROM PROJECT_MEMBER pm LEFT JOIN INNOVATOR i ON pm.INNOVATORID = i.INNOVATORID WHERE pm.PROJECTID = ? ORDER BY pm.JOINEDDATE")) {
             ps.setInt(1, selectedProjectId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {

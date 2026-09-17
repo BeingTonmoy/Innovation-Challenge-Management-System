@@ -45,7 +45,7 @@ public class TestRegistration {
             }
 
             int finalUserId;
-            try (PreparedStatement s1 = conn.prepareStatement("SELECT user_seq.NEXTVAL FROM DUAL"); ResultSet r1 = s1.executeQuery()) {
+            try (PreparedStatement s1 = conn.prepareStatement("SELECT USER_SEQ.NEXTVAL FROM DUAL"); ResultSet r1 = s1.executeQuery()) {
                 if (r1.next()) finalUserId = r1.getInt(1);
                 else throw new SQLException("Failed to get next user_seq value.");
             }
