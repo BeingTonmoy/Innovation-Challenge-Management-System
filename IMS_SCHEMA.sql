@@ -1,0 +1,199 @@
+-- Innovation Management System (IMS) Oracle schema
+-- Run as the application owner, for example SCOTT.
+-- This script is intended for a new IMS schema. It does not drop existing data.
+
+SET DEFINE OFF;
+SET SERVEROUTPUT ON;
+
+PROMPT Creating IMS tables...
+
+CREATE TABLE USER_ACCOUNT (
+    UserID       NUMBER(10)    CONSTRAINT PK_USER_ACCOUNT PRIMARY KEY,
+    Username     VARCHAR2(60)  CONSTRAINT UQ_USER_ACCOUNT_USERNAME UNIQUE NOT NULL,
+    PasswordHash VARCHAR2(128) NOT NULL,
+    Role         VARCHAR2(20)  DEFAULT 'INNOVATOR' NOT NULL,
+    Email        VARCHAR2(120),
+    Status       VARCHAR2(20)  DEFAULT 'ACTIVE' NOT NULL,
+    CONSTRAINT CK_USER_ACCOUNT_ROLE CHECK (Role IN ('INNOVATOR', 'ADMIN', 'NONE')),
+    CONSTRAINT CK_USER_ACCOUNT_STATUS CHECK (Status IN ('ACTIVE', 'INACTIVE'))
+);
+
+CREATE TABLE DEPARTMENT (
+    DeptID      NUMBER(6)    CONSTRAINT PK_DEPARTMENT PRIMARY KEY,
+    DeptName    VARCHAR2(60) CONSTRAINT UQ_DEPARTMENT_NAME UNIQUE NOT NULL,
+    Description VARCHAR2(200),
+    Location    VARCHAR2(60)
+);
+
+CREATE TABLE INNOVATOR (
+    InnovatorID NUMBER(10)    CONSTRAINT PK_INNOVATOR PRIMARY KEY,
+    UserID      NUMBER(10)    CONSTRAINT UQ_INNOVATOR_USER UNIQUE NOT NULL,
+    DeptID      NUMBER(6),
+    Name        VARCHAR2(120) NOT NULL,
+    Email       VARCHAR2(120),
+    Phone       VARCHAR2(30),
+    Expertise   VARCHAR2(200),
+    CONSTRAINT FK_INNOVATOR_USER FOREIGN KEY (UserID) REFERENCES USER_ACCOUNT(UserID),
+    CONSTRAINT FK_INNOVATOR_DEPT FOREIGN KEY (DeptID) REFERENCES DEPARTMENT(DeptID)
+);
+
+CREATE TABLE ADMIN_USER (
+    AdminID NUMBER(10)    CONSTRAINT PK_ADMIN_USER PRIMARY KEY,
+    UserID  NUMBER(10)    CONSTRAINT UQ_ADMIN_USER_USER UNIQUE NOT NULL,
+    Name    VARCHAR2(60)  NOT NULL,
+    Email   VARCHAR2(120),
+    Phone   VARCHAR2(30),
+    CONSTRAINT FK_ADMIN_USER_ACCOUNT FOREIGN KEY (UserID) REFERENCES USER_ACCOUNT(UserID)
+);
+
+CREATE TABLE INNOVATION_CALL (
+    CallID      NUMBER(10)    CONSTRAINT PK_INNOVATION_CALL PRIMARY KEY,
+    Title       VARCHAR2(200) NOT NULL,
+    Description VARCHAR2(500),
+    StartDate   DATE,
+    EndDate     DATE,
+    Status      VARCHAR2(20)  DEFAULT 'OPEN' NOT NULL,
+    CONSTRAINT CK_INNOVATION_CALL_STATUS CHECK (Status IN ('OPEN', 'CLOSED'))
+);
+
+CREATE TABLE IDEA (
+    IdeaID         NUMBER(10)    CONSTRAINT PK_IDEA PRIMARY KEY,
+    InnovatorID    NUMBER(10)    NOT NULL,
+    DeptID         NUMBER(6),
+    CallID         NUMBER(10),
+    Title          VARCHAR2(200) NOT NULL,
+    Description    VARCHAR2(1000) NOT NULL,
+    Category       VARCHAR2(100) NOT NULL,
+    SubmissionDate DATE          DEFAULT SYSDATE NOT NULL,
+    Status         VARCHAR2(20)  DEFAULT 'PENDING' NOT NULL,
+    CONSTRAINT FK_IDEA_INNOVATOR FOREIGN KEY (InnovatorID) REFERENCES INNOVATOR(InnovatorID),
+    CONSTRAINT FK_IDEA_DEPARTMENT FOREIGN KEY (DeptID) REFERENCES DEPARTMENT(DeptID),
+    CONSTRAINT FK_IDEA_CALL FOREIGN KEY (CallID) REFERENCES INNOVATION_CALL(CallID),
+    CONSTRAINT CK_IDEA_STATUS CHECK (Status IN ('PENDING', 'APPROVED', 'ACCEPTED', 'REJECTED'))
+);
+
+CREATE TABLE EVALUATION (
+    EvaluationID   NUMBER(10)   CONSTRAINT PK_EVALUATION PRIMARY KEY,
+    IdeaID         NUMBER(10)   NOT NULL,
+    AdminID        NUMBER(10)   NOT NULL,
+    EvaluationDate DATE         DEFAULT SYSDATE NOT NULL,
+    Score          NUMBER(2)    NOT NULL,
+    Comments       VARCHAR2(1000),
+    DecisionStatus VARCHAR2(20)  NOT NULL,
+    CONSTRAINT FK_EVALUATION_IDEA FOREIGN KEY (IdeaID) REFERENCES IDEA(IdeaID),
+    CONSTRAINT FK_EVALUATION_ADMIN FOREIGN KEY (AdminID) REFERENCES ADMIN_USER(AdminID),
+    CONSTRAINT CK_EVALUATION_SCORE CHECK (Score BETWEEN 1 AND 10),
+    CONSTRAINT CK_EVALUATION_DECISION CHECK (DecisionStatus IN ('APPROVED', 'ACCEPTED', 'REJECTED'))
+);
+
+CREATE TABLE ATTACHMENT (
+    AttachmentID NUMBER(10)    CONSTRAINT PK_ATTACHMENT PRIMARY KEY,
+    IdeaID       NUMBER(10)    NOT NULL,
+    FileName     VARCHAR2(255) NOT NULL,
+    FileType     VARCHAR2(100),
+    FileSize     NUMBER(19),
+    UploadDate   DATE          DEFAULT SYSDATE NOT NULL,
+    FileURL      VARCHAR2(1000),
+    CONSTRAINT FK_ATTACHMENT_IDEA FOREIGN KEY (IdeaID) REFERENCES IDEA(IdeaID) ON DELETE CASCADE
+);
+
+CREATE TABLE INNOVATION_PROJECT (
+    ProjectID    NUMBER(10)    CONSTRAINT PK_INNOVATION_PROJECT PRIMARY KEY,
+    IdeaID       NUMBER(10),
+    ProjectTitle VARCHAR2(200) NOT NULL,
+    StartDate    DATE          NOT NULL,
+    EndDate      DATE          NOT NULL,
+    Status       VARCHAR2(12)  DEFAULT 'ONGOING' NOT NULL,
+    Description  VARCHAR2(300),
+    CreatedBy    NUMBER(10),
+    CreatedDate  DATE          DEFAULT SYSDATE,
+    CONSTRAINT FK_PROJECT_IDEA FOREIGN KEY (IdeaID) REFERENCES IDEA(IdeaID),
+    CONSTRAINT FK_PROJECT_CREATOR FOREIGN KEY (CreatedBy) REFERENCES INNOVATOR(InnovatorID),
+    CONSTRAINT CK_PROJECT_STATUS CHECK (Status IN ('ONGOING', 'COMPLETED')),
+    CONSTRAINT CK_PROJECT_DATES CHECK (EndDate > StartDate)
+);
+
+CREATE TABLE PROJECT_MEMBER (
+    MemberID    NUMBER(10),
+    ProjectID   NUMBER(10) NOT NULL,
+    InnovatorID NUMBER(10) NOT NULL,
+    JoinDate    DATE DEFAULT SYSDATE,
+    CONSTRAINT PK_PROJECT_MEMBER PRIMARY KEY (ProjectID, InnovatorID),
+    CONSTRAINT UQ_PROJECT_MEMBER_ID UNIQUE (MemberID),
+    CONSTRAINT FK_MEMBER_PROJECT FOREIGN KEY (ProjectID) REFERENCES INNOVATION_PROJECT(ProjectID) ON DELETE CASCADE,
+    CONSTRAINT FK_MEMBER_INNOVATOR FOREIGN KEY (InnovatorID) REFERENCES INNOVATOR(InnovatorID)
+);
+
+PROMPT Creating sequences...
+
+CREATE SEQUENCE USER_SEQ START WITH 2 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE INNOVATOR_SEQ START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+PROMPT Creating initial department and administrator...
+
+INSERT INTO DEPARTMENT (DeptID, DeptName, Description, Location)
+VALUES (1, 'General Innovation', 'Default department for new innovator accounts.', 'Main Office');
+
+-- PasswordHash is SHA-256("adminPass"). Change it before production use.
+INSERT INTO USER_ACCOUNT (UserID, Username, PasswordHash, Role, Email, Status)
+VALUES (1, 'admin', 'f40c05434358a62bde28b7991e16f880d059d99adb2c20242cf2db46c197e322', 'ADMIN', 'admin@example.com', 'ACTIVE');
+
+INSERT INTO ADMIN_USER (AdminID, UserID, Name, Email, Phone)
+VALUES (100001, 1, 'adminPass', 'admin@example.com', NULL);
+
+COMMIT;
+
+PROMPT Creating PL/SQL procedures...
+
+CREATE OR REPLACE PROCEDURE IMS_INIT_APP AS
+BEGIN
+    INSERT INTO ADMIN_USER (AdminID, UserID, Name, Email, Phone)
+    SELECT 100001, 1, 'adminPass', NULL, NULL FROM DUAL
+    WHERE NOT EXISTS (SELECT 1 FROM ADMIN_USER WHERE AdminID = 100001);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE IMS_REGISTER_USER (
+    p_username    IN VARCHAR2,
+    p_passwordhash IN VARCHAR2,
+    p_email       IN VARCHAR2,
+    p_name        IN VARCHAR2,
+    p_deptid      IN NUMBER,
+    p_userid      OUT NUMBER,
+    p_innovatorid OUT NUMBER
+) AS
+BEGIN
+    SELECT USER_SEQ.NEXTVAL INTO p_userid FROM DUAL;
+
+    INSERT INTO USER_ACCOUNT (UserID, Username, PasswordHash, Role, Email, Status)
+    VALUES (p_userid, p_username, p_passwordhash, 'INNOVATOR', p_email, 'ACTIVE');
+
+    SELECT INNOVATOR_SEQ.NEXTVAL INTO p_innovatorid FROM DUAL;
+
+    INSERT INTO INNOVATOR (InnovatorID, UserID, DeptID, Name, Email, Phone, Expertise)
+    VALUES (p_innovatorid, p_userid, p_deptid, p_name, p_email, NULL, NULL);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE IMS_CREATE_PROJECT (
+    p_ideaid      IN NUMBER,
+    p_title       IN VARCHAR2,
+    p_startdate   IN DATE,
+    p_enddate     IN DATE,
+    p_status      IN VARCHAR2,
+    p_description IN VARCHAR2,
+    p_projectid   OUT NUMBER
+) AS
+BEGIN
+    SELECT NVL(MAX(ProjectID), 0) + 1 INTO p_projectid FROM INNOVATION_PROJECT;
+
+    INSERT INTO INNOVATION_PROJECT
+        (ProjectID, IdeaID, ProjectTitle, StartDate, EndDate, Status, Description)
+    VALUES
+        (p_projectid, p_ideaid, p_title, p_startdate, p_enddate, p_status, p_description);
+END;
+/
+
+COMMIT;
+
+PROMPT IMS schema creation complete.

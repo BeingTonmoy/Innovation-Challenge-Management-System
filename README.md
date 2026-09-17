@@ -66,6 +66,12 @@ java -Doracle.user=your_user -Doracle.password=your_password -cp ".;lib\ojdbc8.j
 
 ## Database Setup
 
+The complete initial Oracle schema is provided in [IMS_SCHEMA.sql](IMS_SCHEMA.sql). Run it once as the application owner in SQL*Plus, SQLcl, or Oracle SQL Developer before starting the application:
+
+```sql
+@IMS_SCHEMA.sql
+```
+
 `DBConnection.getConnection()` attempts the configured Oracle URLs in order. After connecting, it performs compatibility setup:
 
 1. Ensures the administrator table exists.
