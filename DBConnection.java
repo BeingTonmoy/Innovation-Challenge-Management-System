@@ -91,6 +91,7 @@ public class DBConnection {
     }
 
     private static void advanceSequencePastMaximum(Connection connection, String sequenceName) {
+        // PL/SQL advances an existing sequence beyond the table maximum so upgraded schemas do not reuse IDs.
         String[] details = sequenceDetails(sequenceName);
         String block = "DECLARE v_next NUMBER; v_max NUMBER; BEGIN " +
                 "SELECT NVL(MAX(" + details[1] + "), 0) INTO v_max FROM " + details[0] + "; " +
@@ -141,6 +142,7 @@ public class DBConnection {
     }
 
     private static void ensurePlSqlObjects(Connection connection) {
+        // These stored procedures keep multi-table writes and sequence usage inside Oracle.
         String initProcSql = "CREATE OR REPLACE PROCEDURE IMS_INIT_APP AS " +
                 "BEGIN " +
                 "  NULL; " +
@@ -198,12 +200,14 @@ public class DBConnection {
                 "END;";
 
         try (Statement stmt = connection.createStatement()) {
+            // Create or replace procedures on startup so the Java client matches the current schema.
             stmt.execute(initProcSql);
             stmt.execute(registerProcSql);
             stmt.execute(projectProcSql);
             stmt.execute(evaluateProcSql);
             stmt.execute(memberProcSql);
             try (java.sql.CallableStatement cs = connection.prepareCall("{ call IMS_INIT_APP() }")) {
+                // Execute the initialization procedure after deployment; it is intentionally idempotent.
                 cs.execute();
             }
         } catch (SQLException e) {
@@ -235,6 +239,7 @@ public class DBConnection {
 
     public static int createUserAccountWithProcedure(Connection conn, String username, String passwordHash,
                                                     String email, String name, Integer deptId) throws SQLException {
+        // PL/SQL creates USER_ACCOUNT and INNOVATOR together and returns both generated IDs.
         try (CallableStatement cs = conn.prepareCall("{ call IMS_REGISTER_USER(?, ?, ?, ?, ?, ?, ?) }")) {
             cs.setString(1, username);
             cs.setString(2, passwordHash);
@@ -287,6 +292,7 @@ public class DBConnection {
 
     public static int createProjectWithProcedure(Connection conn, int ideaId, String title, java.sql.Date startDate,
                                                 java.sql.Date endDate, String status, String description) throws SQLException {
+        // PL/SQL allocates PROJECTID and inserts the accepted idea as one database operation.
         try (CallableStatement cs = conn.prepareCall("{ call IMS_CREATE_PROJECT(?, ?, ?, ?, ?, ?, ?) }")) {
             cs.setInt(1, ideaId);
             cs.setString(2, title);
@@ -323,6 +329,7 @@ public class DBConnection {
     }
 
     public static boolean addProjectMemberWithProcedure(Connection conn, int projectId, int innovatorId) throws SQLException {
+        // PL/SQL prevents duplicate project membership and reports whether a row was inserted.
         try (CallableStatement cs = conn.prepareCall("{ call IMS_ADD_PROJECT_MEMBER(?, ?, ?) }")) {
             cs.setInt(1, projectId);
             cs.setInt(2, innovatorId);

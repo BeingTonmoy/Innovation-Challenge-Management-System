@@ -256,6 +256,7 @@ public class InnovationCall extends JFrame {
         try (Connection conn = DBConnection.getConnection()) {
             conn.setAutoCommit(false);
             int adminId = DBConnection.resolveAdminId(conn, username);
+            // PL/SQL inserts the evaluation and updates IDEA.STATUS atomically.
             try (CallableStatement evaluate = conn.prepareCall("{ call IMS_EVALUATE_IDEA(?, ?, ?, ?, ?) }")) {
                 evaluate.setInt(1, ideaId);
                 evaluate.setInt(2, adminId);

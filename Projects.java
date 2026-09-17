@@ -567,6 +567,7 @@ public class Projects extends JFrame {
             try (Connection conn = DBConnection.getConnection()) {
                 int projectId = currentProjectId;
                 if (currentProjectId <= 0) {
+                    // PL/SQL allocates the project ID and inserts the project record.
                     projectId = DBConnection.createProjectWithProcedure(
                             conn,
                             currentIdeaId,
@@ -611,6 +612,7 @@ public class Projects extends JFrame {
             boolean hasMemberId = columnExists(conn, "PROJECT_MEMBER", "MEMBERID");
             int updated;
             try {
+                // PL/SQL checks for an existing member before inserting.
                 updated = DBConnection.addProjectMemberWithProcedure(conn, currentProjectId, currentInnovatorId) ? 1 : 0;
             } catch (SQLException procedureError) {
                 String insertSql;
